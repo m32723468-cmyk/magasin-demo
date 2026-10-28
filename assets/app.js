@@ -1,13 +1,13 @@
 // ==========================================================================
-// نظام المحل — آدم وحواء
-// البحث حسب الصنف (الاسم / الكود / QR / الصورة)، صفحة المنتوج والمخزون، الإضافة بالصور، المعطيات.
+// نظام المحل
+// البحث حسب الصنف (الاسم / الكود / QR / الصورة)، صفحة المنتج والمخزون، الإضافة بالصور، المعطيات.
 // ==========================================================================
 import { embed, MODEL_TAG } from './vision.js';
 
 const app = document.getElementById('app');
 const S = { cats: [], fabrics: [], sizes: [], branches: [], settings: {}, products: [], cat: 0,
   q: '', f: { fabric: '', size: '', color: '', avail: false }, pendingPhoto: null };
-const KIND = { full: 'المنتوج كامل', neck: 'العنق', hand: 'فاليد / التفاصيل', other: 'صورة أخرى' };
+const KIND = { full: 'المنتج كامل', neck: 'العنق', hand: 'في اليد / التفاصيل', other: 'صورة أخرى' };
 
 // ---------- أدوات ----------
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -31,8 +31,8 @@ async function api(action, data, isForm) {
     : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) };
   let res, j;
   try { res = await fetch('api.php?action=' + action, opt); j = await res.json(); }
-  catch (e) { throw new Error('ما قدرتش نتصل بالسيرفر — واش XAMPP خدام؟'); }
-  if (!res.ok || j.error) throw new Error(j.message || 'وقع مشكل.');
+  catch (e) { throw new Error('تعذّر الاتصال بالخادم — هل XAMPP يعمل؟'); }
+  if (!res.ok || j.error) throw new Error(j.message || 'حدث خطأ.');
   return j;
 }
 
@@ -84,7 +84,7 @@ const branchName = (id) => (S.branches.find((b) => +b.id === +id) || {}).name ||
 
 function renderTop() {
   const sel = $('#branch');
-  sel.innerHTML = (S.branches.length ? '' : '<option value="0">— ما كاين حتى فرع —</option>') +
+  sel.innerHTML = (S.branches.length ? '' : '<option value="0">— لا يوجد أي فرع —</option>') +
     S.branches.map((b) => `<option value="${b.id}">${esc(b.name)}</option>`).join('');
   sel.value = String(S.settings.current_branch || (S.branches[0] && S.branches[0].id) || 0);
 }
@@ -103,8 +103,8 @@ function viewSearch() {
   app.innerHTML = `
     <div class="cats">${S.cats.map((c) => `<button class="cat${+c.id === +S.cat ? ' on' : ''}" data-cat="${c.id}">${esc(c.name)}<span>${S.products.filter((p) => +p.category_id === +c.id).length}</span></button>`).join('')}</div>
     <div class="search">
-      <input class="input" id="q" type="search" autocomplete="off" placeholder="الاسم ولا الكود… (ولا امسح بالمسدس)" value="${esc(S.q)}">
-      <button class="btn" id="scanQr" title="مسح الباركود ولا QR بالكاميرا">${ICON.qr}<span>سكان</span></button>
+      <input class="input" id="q" type="search" autocomplete="off" placeholder="الاسم أو الرمز… (أو امسح بقارئ الباركود)" value="${esc(S.q)}">
+      <button class="btn" id="scanQr" title="مسح الباركود أو QR بالكاميرا">${ICON.qr}<span>مسح</span></button>
       <button class="btn btn-main" id="photo" title="البحث بالصورة">${ICON.camera}<span>صورة</span></button>
     </div>
     <div class="filters">
@@ -144,19 +144,19 @@ function filtered() {
 
 function itemHtml(p, extra = '') {
   const st = p.stock_here > 0 ? `<span class="pill pill-ok">متوفر: ${p.stock_here}</span>`
-    : p.stock_all > 0 ? `<span class="pill pill-soft">كاين ففرع آخر</span>` : `<span class="pill pill-no">ما كاينش</span>`;
+    : p.stock_all > 0 ? `<span class="pill pill-soft">متوفر في فرع آخر</span>` : `<span class="pill pill-no">غير متوفر</span>`;
   return `<a class="card item" href="#/p/${p.id}">
-    ${p.thumb ? `<img class="thumb" src="${esc(p.thumb)}" alt="" loading="lazy">` : '<div class="thumb">بلا صورة</div>'}
+    ${p.thumb ? `<img class="thumb" src="${esc(p.thumb)}" alt="" loading="lazy">` : '<div class="thumb">بدون صورة</div>'}
     <div><div class="name">${esc(p.name)}</div><div class="meta"><span class="code">${esc(p.code)}</span>${p.fabric ? ' · ' + esc(p.fabric) : ''}</div>${extra}</div>
     <div class="side"><div class="price">${money(p.price)}</div>${st}</div></a>`;
 }
 
 function renderResults() {
   const rows = filtered(), box = $('#res'); if (!box) return;
-  $('#cnt').textContent = rows.length + ' منتوج';
+  $('#cnt').textContent = rows.length + ' منتج';
   if (!rows.length) {
-    box.innerHTML = `<div class="card empty"><b>ما لقيت حتى منتوج</b>جرّب كلمة أخرى، امسح الفلاتر، ولا قلّب بالصورة.
-      <div class="actions" style="justify-content:center;margin-top:12px"><a class="btn" href="#/add?cat=${S.cat}${S.q ? '&code=' + encodeURIComponent(S.q) : ''}">${ICON.plus} زيد منتوج</a></div></div>`;
+    box.innerHTML = `<div class="card empty"><b>لم يُعثر على أي منتج</b>جرّب كلمة أخرى، أو امسح عوامل التصفية، أو ابحث بالصورة.
+      <div class="actions" style="justify-content:center;margin-top:12px"><a class="btn" href="#/add?cat=${S.cat}${S.q ? '&code=' + encodeURIComponent(S.q) : ''}">${ICON.plus} أضف منتجًا</a></div></div>`;
     return;
   }
   box.innerHTML = rows.map((p) => itemHtml(p)).join('');
@@ -164,8 +164,8 @@ function renderResults() {
 
 // ---------- مسح QR بالكاميرا ----------
 async function openQr() {
-  const m = modal(`<div class="sheet-head"><h3>سكان الباركود / QR</h3><button class="close" data-x>×</button></div>
-    <div id="qrv" class="qr-box"></div><div class="status" id="qrs">وجّه الكاميرا للباركود ديال القطعة…</div>`, () => stop());
+  const m = modal(`<div class="sheet-head"><h3>مسح الباركود / QR</h3><button class="close" data-x>×</button></div>
+    <div id="qrv" class="qr-box"></div><div class="status" id="qrs">وجّه الكاميرا نحو باركود القطعة…</div>`, () => stop());
   let scanner = null;
   const stop = () => { if (scanner) { scanner.stop().catch(() => {}); scanner = null; } };
   $('[data-x]', m.el).onclick = () => { stop(); m.close(); };
@@ -174,7 +174,7 @@ async function openQr() {
     const F = window.Html5QrcodeSupportedFormats;
     scanner = new window.Html5Qrcode('qrv', { formatsToSupport: [F.CODE_128, F.EAN_13, F.EAN_8, F.CODE_39, F.UPC_A, F.QR_CODE], verbose: false });
     await scanner.start({ facingMode: 'environment' }, { fps: 12, qrbox: { width: 290, height: 150 } }, (text) => { stop(); m.close(); handleCode(text); });
-  } catch (e) { $('#qrs').className = 'status bad'; $('#qrs').textContent = 'ما قدرتش نحل الكاميرا. استعمل مسدس الـPOS ولا اكتب الكود.'; }
+  } catch (e) { $('#qrs').className = 'status bad'; $('#qrs').textContent = 'تعذّر تشغيل الكاميرا. استعمل قارئ الباركود أو اكتب الرمز.'; }
 }
 function loadScript(src) { return new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); }); }
 
@@ -184,10 +184,10 @@ function handleCode(raw) {
   const p = productByCode(code);
   if (p) { showScanCard(p); return; }
   S.q = code; location.hash = '#/c/' + S.cat; route();
-  toast('الكود «' + code + '» ما كاينش', true);
+  toast('الرمز «' + code + '» غير موجود', true);
 }
 
-// ---------- نافذة المنتوج بعد السكان: الصورة، الثمن، وكل التفاصيل ----------
+// ---------- نافذة المنتج بعد السكان: الصورة، الثمن، وكل التفاصيل ----------
 let scanCard = null;
 async function showScanCard(lite) {
   if (scanCard) scanCard.close();
@@ -201,7 +201,7 @@ async function showScanCard(lite) {
     <div class="sheet-head"><h3>${esc(catName(p.category_id))}</h3><button class="close" data-x aria-label="إغلاق">×</button></div>
     <div class="sc">
       <div class="sc-media">
-        ${img0 ? `<img class="sc-main" id="scMain" src="${esc(img0.path)}" alt="">` : '<div class="sc-main sc-noimg">بلا صورة</div>'}
+        ${img0 ? `<img class="sc-main" id="scMain" src="${esc(img0.path)}" alt="">` : '<div class="sc-main sc-noimg">بدون صورة</div>'}
         ${p.images.length > 1 ? `<div class="sc-thumbs">${p.images.map((i, k) => `<button type="button" class="${k ? '' : 'on'}" data-src="${esc(i.path)}" title="${esc(KIND[i.kind] || '')}"><img src="${esc(i.path)}" alt=""></button>`).join('')}</div>` : ''}
       </div>
       <div class="sc-info">
@@ -215,13 +215,13 @@ async function showScanCard(lite) {
           ${p.note ? `<dt>ملاحظة</dt><dd>${esc(p.note)}</dd>` : ''}
         </dl>
         <div class="sc-stock">
-          <div class="sc-stock-h"><span>المخزون — ${esc(branchName(br))}</span>${hereTotal ? `<span class="pill pill-ok">${hereTotal} قطعة</span>` : '<span class="pill pill-no">ما كاينش هنا</span>'}</div>
+          <div class="sc-stock-h"><span>المخزون — ${esc(branchName(br))}</span>${hereTotal ? `<span class="pill pill-ok">${hereTotal} قطعة</span>` : '<span class="pill pill-no">غير متوفر هنا</span>'}</div>
           ${here.length ? `<div class="sc-sizes">${here.map((r) => `<span class="sc-size"><b>${esc(r.size || '—')}</b>${r.color ? `<i>${esc(r.color)}</i>` : ''}<em>${r.qty}</em></span>`).join('')}</div>` : ''}
-          ${others.length ? `<div class="muted sc-others">ففروع أخرى: ${others.map((x) => esc(x.b.name) + ' <b>' + x.n + '</b>').join(' · ')}</div>` : ''}
+          ${others.length ? `<div class="muted sc-others">في فروع أخرى: ${others.map((x) => esc(x.b.name) + ' <b>' + x.n + '</b>').join(' · ')}</div>` : ''}
         </div>
       </div>
     </div>
-    <div class="actions" style="margin-top:14px"><a class="btn btn-main" href="#/p/${p.id}" data-open>فتح صفحة المنتوج</a><button class="btn" data-again>سكان آخر</button></div>`, () => { scanCard = null; });
+    <div class="actions" style="margin-top:14px"><a class="btn btn-main" href="#/p/${p.id}" data-open>فتح صفحة المنتج</a><button class="btn" data-again>مسح آخر</button></div>`, () => { scanCard = null; });
   scanCard = m;
   m.el.querySelector('.sheet').classList.add('sheet-scan');
   const close = () => { m.close(); scanCard = null; };
@@ -249,23 +249,23 @@ async function showScanCard(lite) {
 function openPhotoSearch() {
   const indexed = S.products.filter((p) => +p.indexed > 0);
   const m = modal(`<div class="sheet-head"><h3>البحث بالصورة</h3><button class="close" data-x>×</button></div>
-    <p class="muted" style="margin:0 0 12px">صوّر القطعة (فاليد، على العنق، ولا كاملة). المطابقة بالشكل ماشي باللون.</p>
-    <label class="check" style="margin-bottom:12px"><input type="checkbox" id="onlyCat" checked> غير فـ«${esc(catName(S.cat))}»</label>
+    <p class="muted" style="margin:0 0 12px">صوّر القطعة (في اليد، أو على العنق، أو كاملة). تتم المطابقة حسب الشكل لا حسب اللون.</p>
+    <label class="check" style="margin-bottom:12px"><input type="checkbox" id="onlyCat" checked> فقط في «${esc(catName(S.cat))}»</label>
     <input type="file" accept="image/*" id="pf" hidden>
-    <button class="btn btn-main" id="pick" style="width:100%">${ICON.camera} صوّر ولا اختار صورة</button>
+    <button class="btn btn-main" id="pick" style="width:100%">${ICON.camera} التقط صورة أو اختر صورة</button>
     <div id="pout"></div>`);
   $('[data-x]', m.el).onclick = () => m.close();
   $('#pick', m.el).onclick = () => $('#pf', m.el).click();
-  if (!indexed.length) $('#pout', m.el).innerHTML = '<div class="status bad">ما كاين حتى منتوج عندو صور مسجّلة مازال. زيد الصور للمنتوجات أولاً.</div>';
+  if (!indexed.length) $('#pout', m.el).innerHTML = '<div class="status bad">لا يوجد بعدُ أي منتج له صور مسجّلة. أضف صور المنتجات أولًا.</div>';
   $('#pf', m.el).onchange = async (e) => {
     const file = e.target.files[0]; if (!file) return;
     const out = $('#pout', m.el), blob = await shrink(file, 1024);
-    out.innerHTML = `<img class="preview" src="${URL.createObjectURL(blob)}" alt=""><div class="status" id="pst">جاري التحليل…<div class="bar"><i id="pbar"></i></div></div>`;
+    out.innerHTML = `<img class="preview" src="${URL.createObjectURL(blob)}" alt=""><div class="status" id="pst">جارٍ التحليل…<div class="bar"><i id="pbar"></i></div></div>`;
     try {
-      const emb = await embed(blob, (r) => { $('#pst', m.el).firstChild.textContent = 'كنحمّل نموذج الذكاء الاصطناعي (مرة وحدة فهاد الجهاز)… ' + Math.round(r * 100) + '%'; $('#pbar', m.el).style.width = Math.round(r * 100) + '%'; });
+      const emb = await embed(blob, (r) => { $('#pst', m.el).firstChild.textContent = 'جارٍ تحميل نموذج الذكاء الاصطناعي (مرة واحدة على هذا الجهاز)… ' + Math.round(r * 100) + '%'; $('#pbar', m.el).style.width = Math.round(r * 100) + '%'; });
       const j = await api('search_image', { embedding: emb, model: MODEL_TAG, category_id: $('#onlyCat', m.el).checked ? S.cat : 0, limit: 6 });
       showMatches(m, out, j, blob);
-    } catch (err) { $('#pst', m.el).className = 'status bad'; $('#pst', m.el).textContent = err.message || 'وقع مشكل فالتحليل.'; }
+    } catch (err) { $('#pst', m.el).className = 'status bad'; $('#pst', m.el).textContent = err.message || 'حدث خطأ أثناء التحليل.'; }
     e.target.value = '';
   };
 }
@@ -275,11 +275,11 @@ function showMatches(m, out, j, blob) {
   const good = j.matches.filter((x) => x.score >= j.threshold);
   const row = (x, dim) => { const p = byId(x.product_id); return p ? itemHtml(p, `<div class="score">التشابه: ${Math.round(x.score * 100)}% · ${KIND[x.kind] || ''}</div>`).replace('class="card item"', `class="card item"${dim ? ' style="opacity:.6"' : ''}`) : ''; };
   if (good.length) {
-    out.innerHTML = `<div class="status ok">لقيت ${good.length === 1 ? 'القطعة' : good.length + ' قطع شبيهة'}:</div><div class="list">${good.map((x) => row(x)).join('')}</div>`;
+    out.innerHTML = `<div class="status ok">${good.length === 1 ? 'عُثر على القطعة' : 'عُثر على ' + good.length + ' قطع مشابهة'}:</div><div class="list">${good.map((x) => row(x)).join('')}</div>`;
   } else {
-    out.innerHTML = `<div class="status bad"><b>هاد المنتوج ما كاينش فالقاعدة.</b></div>
-      <div class="actions"><button class="btn" id="near">ورّيني الأقرب</button><a class="btn" id="addThis" href="#/add?cat=${S.cat}">${ICON.plus} زيد هاد المنتوج</a></div><div class="list" id="nearList" style="margin-top:10px"></div>`;
-    const n = $('#near', out); if (n) n.onclick = () => { $('#nearList', out).innerHTML = j.matches.slice(0, 3).map((x) => row(x, true)).join('') || '<div class="muted">ما كاين والو.</div>'; n.remove(); };
+    out.innerHTML = `<div class="status bad"><b>هذا المنتج غير موجود في قاعدة البيانات.</b></div>
+      <div class="actions"><button class="btn" id="near">عرض الأقرب</button><a class="btn" id="addThis" href="#/add?cat=${S.cat}">${ICON.plus} أضف هذا المنتج</a></div><div class="list" id="nearList" style="margin-top:10px"></div>`;
+    const n = $('#near', out); if (n) n.onclick = () => { $('#nearList', out).innerHTML = j.matches.slice(0, 3).map((x) => row(x, true)).join('') || '<div class="muted">لا توجد نتائج.</div>'; n.remove(); };
     $('#addThis', out).onclick = () => { S.pendingPhoto = blob; };
   }
   $$('a.item', out).forEach((a) => a.addEventListener('click', () => m.close()));
@@ -287,10 +287,10 @@ function showMatches(m, out, j, blob) {
 }
 
 // ==========================================================================
-// 2) صفحة المنتوج + المخزون
+// 2) صفحة المنتج + المخزون
 // ==========================================================================
 async function viewProduct(id) {
-  app.innerHTML = '<div class="empty">جاري التحميل…</div>';
+  app.innerHTML = '<div class="empty">جارٍ التحميل…</div>';
   let p; try { p = await api('product&id=' + id); } catch (e) { app.innerHTML = `<div class="card empty"><b>${esc(e.message)}</b></div>`; return; }
   const sizes = list(p.sizes).length ? list(p.sizes) : [''];
   const colors = list(p.colors).length ? list(p.colors) : [''];
@@ -302,7 +302,7 @@ async function viewProduct(id) {
     <div class="card p-head"><div class="muted">${esc(catName(p.category_id))}</div><h1>${esc(p.name)}</h1>
       <div><span class="code">${esc(p.code)}</span> · <span class="price">${money(p.price)}</span></div></div>
     ${p.images.length ? `<div class="gallery">${p.images.map((i) => `<div class="shot"><img src="${esc(i.path)}" alt="" loading="lazy"><span class="tag">${KIND[i.kind] || ''}</span></div>`).join('')}</div>`
-      : `<div class="card empty" style="margin-bottom:12px">ما كاين حتى صورة — <a href="#/edit/${p.id}">زيد الصور</a> باش يتلقى بالبحث بالصورة.</div>`}
+      : `<div class="card empty" style="margin-bottom:12px">لا توجد أي صورة — <a href="#/edit/${p.id}">أضف الصور</a> ليمكن العثور عليه بالبحث بالصورة.</div>`}
     <dl class="card kv">
       <dt>الثوب</dt><dd>${esc(p.fabric || '—')}</dd>
       <dt>المقاسات</dt><dd>${esc(list(p.sizes).join('، ') || '—')}</dd>
@@ -315,8 +315,8 @@ async function viewProduct(id) {
         ${colors.map((c) => `<tr><td>${esc(c || '—')}</td>${sizes.map((s) => `<td><input class="input" type="number" min="0" inputmode="numeric" data-s="${esc(s)}" data-c="${esc(c)}" value="${qty(br, s, c) || ''}" placeholder="0"></td>`).join('')}<td class="rt"></td></tr>`).join('')}
         </tbody></table></div>
         <div class="actions" style="margin-top:10px"><button class="btn btn-main" id="saveStock">حفظ المخزون</button></div>`
-      : '<div class="muted">اختار الفرع ديال هاد الحاسوب من الفوق (ولا زيدو فـ«المعطيات ← الفروع»).</div>'}
-      ${others.length ? `<div style="margin-top:12px" class="muted">ففروع أخرى: ${others.map((x) => esc(x.b.name) + ': <b>' + x.n + '</b>').join(' · ')}</div>` : ''}
+      : '<div class="muted">اختر فرع هذا الحاسوب من الأعلى (أو أضفه من «البيانات المرجعية ← الفروع»).</div>'}
+      ${others.length ? `<div style="margin-top:12px" class="muted">في فروع أخرى: ${others.map((x) => esc(x.b.name) + ': <b>' + x.n + '</b>').join(' · ')}</div>` : ''}
     </div>
     <div class="card section">
       <div class="row" style="justify-content:space-between;flex-wrap:wrap;margin-bottom:10px">
@@ -324,12 +324,12 @@ async function viewProduct(id) {
         <div class="seg" role="group" aria-label="نوع الكود"><button type="button" data-lt="barcode">باركود</button><button type="button" data-lt="qr">QR</button></div>
       </div>
       <div class="lbl-opts">
-        <span class="label" style="margin:0">شنو يبان فالملصق:</span>
+        <span class="label" style="margin:0">ما يظهر في الملصق:</span>
         <div class="chips" id="lblChips">${LABEL_FIELDS.map((f) => `<button type="button" class="chip" data-f="${f[0]}">${f[1]}</button>`).join('')}</div>
         <div class="row" style="flex-wrap:wrap">
-          <input class="input" id="lblExtra" maxlength="80" placeholder="كتابة إضافية (اختياري) — مثلاً: تخفيض 10%" style="flex:1 1 220px">
-          <button type="button" class="btn btn-sm" id="lblOnly">غير الباركود</button>
-          <button type="button" class="btn btn-sm" id="lblAll">كلشي</button>
+          <input class="input" id="lblExtra" maxlength="80" placeholder="نص إضافي (اختياري) — مثلًا: تخفيض 10%" style="flex:1 1 220px">
+          <button type="button" class="btn btn-sm" id="lblOnly">الباركود فقط</button>
+          <button type="button" class="btn btn-sm" id="lblAll">الكل</button>
         </div>
       </div>
       <div class="tag-label" id="qrLabel">
@@ -339,19 +339,19 @@ async function viewProduct(id) {
       <div class="muted" id="tlNote" style="font-size:13px;margin-top:6px"></div>
       <button class="btn btn-sm" id="printQr" style="margin-top:10px">طباعة الملصق</button>
     </div>
-    <div class="actions" style="margin-top:12px"><a class="btn" href="#/edit/${p.id}">تعديل</a><button class="btn btn-bad" id="delP">حذف المنتوج</button></div>`;
+    <div class="actions" style="margin-top:12px"><a class="btn" href="#/edit/${p.id}">تعديل</a><button class="btn btn-bad" id="delP">حذف المنتج</button></div>`;
 
   const sumRows = () => $$('.tbl tbody tr').forEach((tr) => { tr.querySelector('.rt').textContent = $$('input', tr).reduce((t, i) => t + (+i.value || 0), 0); });
   sumRows(); $$('.tbl input').forEach((i) => i.oninput = sumRows);
   const ss = $('#saveStock'); if (ss) ss.onclick = async () => {
     const rows = $$('.tbl input').map((i) => ({ size: i.dataset.s, color: i.dataset.c, qty: +i.value || 0 }));
-    if (rows.some((r) => r.qty < 0)) { toast('الكمية ما تقدرش تكون ناقص', true); return; }
+    if (rows.some((r) => r.qty < 0)) { toast('لا يمكن أن تكون الكمية سالبة', true); return; }
     ss.disabled = true;
     try { await api('stock_save', { product_id: p.id, branch_id: br, rows }); await loadAll(); toast('تم حفظ المخزون ✓'); }
     catch (e) { toast(e.message, true); } finally { ss.disabled = false; }
   };
   $('#delP').onclick = async () => {
-    if (!(await confirmBox('واش بغيتي تحذف «' + p.name + '» (' + p.code + ') مع الصور والمخزون ديالو؟', 'حذف'))) return;
+    if (!(await confirmBox('هل تريد حذف «' + p.name + '» (' + p.code + ') مع صوره ومخزونه؟', 'حذف'))) return;
     try { await api('product_delete', { id: p.id }); await loadAll(); toast('تم الحذف'); location.hash = '#/c/' + (p.category_id || S.cat); }
     catch (e) { toast(e.message, true); }
   };
@@ -378,7 +378,7 @@ async function viewProduct(id) {
     if (type === 'barcode' && /^[\x20-\x7E]+$/.test(p.code)) {
       const svg = await makeBarcode(p.code, O.code);
       if (svg) { box.className = 'tl-code tl-bar'; box.innerHTML = ''; box.appendChild(svg); return; }
-    } else if (type === 'barcode') note.textContent = 'الكود فيه حروف ما كيقبلهاش الباركود، فاستعملت QR.';
+    } else if (type === 'barcode') note.textContent = 'يحتوي الرمز على أحرف لا يقبلها الباركود، لذا استُعمل QR.';
     const src = await makeQr(p.code);
     box.className = 'tl-code tl-qr'; box.innerHTML = src ? `<img src="${src}" alt="QR">${O.code ? `<div class="code tl-qrtext">${esc(p.code)}</div>` : ''}` : '';
   };
@@ -397,7 +397,7 @@ async function viewProduct(id) {
 }
 
 // شنو يبان فالملصق — بشكل عادي كلشي ظاهر؛ المستعمل كيبدّل كيف بغا
-const LABEL_FIELDS = [['code', 'الكود تحت الباركود'], ['name', 'السمية'], ['meta', 'الصنف والثوب'], ['sizes', 'المقاسات'], ['colors', 'الألوان'], ['price', 'الثمن']];
+const LABEL_FIELDS = [['code', 'الرمز تحت الباركود'], ['name', 'الاسم'], ['meta', 'الصنف والثوب'], ['sizes', 'المقاسات'], ['colors', 'الألوان'], ['price', 'الثمن']];
 function labelOpts() {
   const saved = S.settings.label_opts || {}, o = {};
   LABEL_FIELDS.forEach((f) => { o[f[0]] = saved[f[0]] === undefined ? true : !!saved[f[0]]; });
@@ -423,23 +423,23 @@ async function makeQr(text) {
 }
 
 // ==========================================================================
-// 3) إضافة / تعديل منتوج (بالصور بالترتيب)
+// 3) إضافة / تعديل منتج (بالصور بالترتيب)
 // ==========================================================================
 async function viewForm(id, params) {
   let p = { id: 0, category_id: +(params.get('cat') || S.cat), code: params.get('code') || '', name: '', fabric: '', price: '', sizes: '', colors: '', note: '', images: [] };
   if (id) { try { p = await api('product&id=' + id); } catch (e) { app.innerHTML = `<div class="card empty"><b>${esc(e.message)}</b></div>`; return; } }
   const F = { sizes: list(p.sizes), colors: list(p.colors) };
-  const queue = [];                // صور منتوج جديد كتتسجّل من بعد الحفظ
+  const queue = [];                // صور منتج جديد كتتسجّل من بعد الحفظ
   if (!id && S.pendingPhoto) { queue.push({ kind: 'full', blob: S.pendingPhoto }); S.pendingPhoto = null; }
   const names = [...new Set(S.products.map((x) => x.name))];
 
   app.innerHTML = `
     <a class="back" href="${id ? '#/p/' + id : '#/c/' + S.cat}">${ICON.back} رجوع</a>
     <div class="card form">
-      <div class="h2" style="margin:0">${id ? 'تعديل المنتوج' : 'منتوج جديد'}</div>
+      <div class="h2" style="margin:0">${id ? 'تعديل المنتج' : 'منتج جديد'}</div>
       <div class="grid2">
         <div><label class="label">الصنف</label><select class="input" id="fCat">${S.cats.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
-        <div><label class="label">الكود *</label><input class="input code" id="fCode" dir="ltr" autocomplete="off" value="${esc(p.code)}" placeholder="256KT"><div class="err" id="eCode"></div></div>
+        <div><label class="label">الرمز *</label><input class="input code" id="fCode" dir="ltr" autocomplete="off" value="${esc(p.code)}" placeholder="256KT"><div class="err" id="eCode"></div></div>
         <div><label class="label">الاسم *</label><input class="input" id="fName" list="dlNames" autocomplete="off" value="${esc(p.name)}" placeholder="مثال: نرفين"><div class="err" id="eName"></div></div>
         <div><label class="label">الثوب</label><input class="input" id="fFab" list="dlFab" autocomplete="off" value="${esc(p.fabric)}" placeholder="اكتب: مك ← مكرش"></div>
         <div><label class="label">الثمن (DH)</label><input class="input" id="fPrice" dir="ltr" inputmode="decimal" value="${p.price == null ? '' : esc(p.price)}" placeholder="0"><div class="err" id="ePrice"></div></div>
@@ -451,7 +451,7 @@ async function viewForm(id, params) {
         <div class="row" style="margin-top:8px"><input class="input" id="newSize" placeholder="مقاس آخر" style="max-width:180px"><button class="btn btn-sm" id="addSize">${ICON.plus}</button></div></div>
       <div><label class="label">الألوان</label><div class="chips" id="colors"></div>
         <div class="row" style="margin-top:8px"><input class="input" id="newColor" placeholder="مثال: أسود" style="max-width:180px"><button class="btn btn-sm" id="addColor">${ICON.plus}</button></div></div>
-      <div><label class="label">الصور — بهاد الترتيب باش البحث بالصورة يكون دقيق</label><div class="slots" id="slots"></div></div>
+      <div><label class="label">الصور — بهذا الترتيب ليكون البحث بالصورة دقيقًا</label><div class="slots" id="slots"></div></div>
       <div class="actions"><button class="btn btn-main" id="save" style="min-width:140px">حفظ</button><a class="btn" href="${id ? '#/p/' + id : '#/c/' + S.cat}">إلغاء</a></div>
     </div>`;
   $('#fCat').value = String(p.category_id || S.cat);
@@ -462,7 +462,7 @@ async function viewForm(id, params) {
     $$('#sizes .chip').forEach((b) => b.onclick = () => { const s = b.dataset.s; F.sizes = F.sizes.includes(s) ? F.sizes.filter((x) => x !== s) : [...F.sizes, s]; drawSizes(); });
   };
   const drawColors = () => {
-    $('#colors').innerHTML = F.colors.map((c) => `<span class="chip-x">${esc(c)}<button type="button" data-c="${esc(c)}" aria-label="حيّد">×</button></span>`).join('') || '<span class="muted">بلا ألوان (اختياري)</span>';
+    $('#colors').innerHTML = F.colors.map((c) => `<span class="chip-x">${esc(c)}<button type="button" data-c="${esc(c)}" aria-label="إزالة">×</button></span>`).join('') || '<span class="muted">بدون ألوان (اختياري)</span>';
     $$('#colors button').forEach((b) => b.onclick = () => { F.colors = F.colors.filter((x) => x !== b.dataset.c); drawColors(); });
   };
   const addFrom = (inp, arr, draw) => { const v = $(inp).value.trim(); if (v && !F[arr].includes(v)) F[arr].push(v); $(inp).value = ''; draw(); };
@@ -483,7 +483,7 @@ async function viewForm(id, params) {
         <button type="button" class="del" ${img ? `data-img="${img.id}"` : `data-q="${queue.indexOf(q)}"`} aria-label="حذف">×</button>${q && q.busy ? `<div class="busy">${esc(q.busy)}</div>` : ''}</div>`;
       return `<div class="slot" data-kind="${kind}"><span class="n">${n || '+'}</span><span class="t">${esc(title)}</span><span class="s">${esc(hint)}</span></div>`;
     };
-    let html = slotFor('full', 1, KIND.full, 'القطعة كاملة') + slotFor('neck', 2, KIND.neck, 'من جهة العنق') + slotFor('hand', 3, KIND.hand, 'فاليد ولا تفصيلة');
+    let html = slotFor('full', 1, KIND.full, 'القطعة كاملة') + slotFor('neck', 2, KIND.neck, 'من جهة العنق') + slotFor('hand', 3, KIND.hand, 'في اليد أو تفصيلة');
     images.filter((i) => !used.has(i)).concat(queue.filter((x) => !used.has(x))).forEach((x) => {
       const isImg = 'path' in x;
       html += `<div class="slot filled"><img src="${isImg ? esc(x.path) : URL.createObjectURL(x.blob)}" alt=""><span class="tag">${esc(KIND[x.kind] || KIND.other)}</span>
@@ -495,7 +495,7 @@ async function viewForm(id, params) {
     $$('.del[data-q]', box).forEach((b) => b.onclick = (e) => { e.stopPropagation(); queue.splice(+b.dataset.q, 1); drawSlots(); });
     $$('.del[data-img]', box).forEach((b) => b.onclick = async (e) => {
       e.stopPropagation();
-      if (!(await confirmBox('نحذف هاد الصورة؟', 'حذف'))) return;
+      if (!(await confirmBox('هل تريد حذف هذه الصورة؟', 'حذف'))) return;
       try { await api('image_delete', { id: +b.dataset.img }); images.splice(images.findIndex((i) => +i.id === +b.dataset.img), 1); drawSlots(); }
       catch (err) { toast(err.message, true); }
     });
@@ -506,7 +506,7 @@ async function viewForm(id, params) {
       const file = inp.files[0]; if (!file) return;
       const blob = await shrink(file);
       if (!id) { queue.push({ kind, blob }); drawSlots(); return; }
-      const item = { kind, blob, busy: 'جاري الحفظ…' }; queue.push(item); drawSlots();
+      const item = { kind, blob, busy: 'جارٍ الحفظ…' }; queue.push(item); drawSlots();
       try { const r = await uploadImage(id, kind, blob, (t) => { item.busy = t; drawSlots(); }); images.push({ id: r.id, kind, path: r.path, indexed: r.indexed }); }
       catch (err) { toast(err.message, true); }
       queue.splice(queue.indexOf(item), 1); drawSlots();
@@ -519,8 +519,8 @@ async function viewForm(id, params) {
   const errs = () => {
     const code = $('#fCode').value.trim(), name = $('#fName').value.trim(), price = $('#fPrice').value.trim().replace(',', '.');
     const dup = code && S.products.find((x) => norm(x.code) === norm(code) && +x.id !== +id);
-    const e = { code: !code ? 'الكود ضروري.' : dup ? 'هاد الكود كاين ديجا عند «' + dup.name + '».' : '', name: !name ? 'الاسم ضروري.' : '',
-      price: price && isNaN(+price.replace(/dh/i, '')) ? 'الثمن خاصو يكون رقم.' : '' };
+    const e = { code: !code ? 'الرمز مطلوب.' : dup ? 'هذا الرمز مستعمل مسبقًا للمنتج «' + dup.name + '».' : '', name: !name ? 'الاسم مطلوب.' : '',
+      price: price && isNaN(+price.replace(/dh/i, '')) ? 'يجب أن يكون الثمن رقمًا.' : '' };
     $('#eCode').textContent = e.code; $('#fCode').setAttribute('aria-invalid', e.code ? 'true' : 'false');
     $('#eName').textContent = e.name; $('#fName').setAttribute('aria-invalid', e.name ? 'true' : 'false');
     $('#ePrice').textContent = e.price; $('#fPrice').setAttribute('aria-invalid', e.price ? 'true' : 'false');
@@ -532,8 +532,8 @@ async function viewForm(id, params) {
   const save = $('#save');
   save.onclick = async () => {
     if (save.disabled) return;
-    if (errs()) { toast('صحّح الخانات اللي باينين بالأحمر', true); return; }
-    save.disabled = true; save.textContent = 'جاري الحفظ…';
+    if (errs()) { toast('صحّح الخانات المحددة باللون الأحمر', true); return; }
+    save.disabled = true; save.textContent = 'جارٍ الحفظ…';
     try {
       const r = await api('product_save', { id: +id || 0, category_id: +$('#fCat').value, code: $('#fCode').value, name: $('#fName').value,
         fabric: $('#fFab').value, price: $('#fPrice').value, sizes: F.sizes, colors: F.colors, note: $('#fNote').value });
@@ -542,7 +542,7 @@ async function viewForm(id, params) {
         try { await uploadImage(r.id, q.kind, q.blob, (t) => { q.busy = t; drawSlots(); }); } catch (err) { toast(err.message, true); }
       }
       await loadAll();
-      toast(id ? 'تم حفظ التعديلات ✓' : 'تمت إضافة المنتوج ✓');
+      toast(id ? 'تم حفظ التعديلات ✓' : 'تمت إضافة المنتج ✓');
       location.hash = '#/p/' + r.id;
     } catch (e) { toast(e.message, true); save.disabled = false; save.textContent = 'حفظ'; }
   };
@@ -551,9 +551,9 @@ async function viewForm(id, params) {
 // الصورة كتتصيفط مع البصمة ديالها. إلا فشل الذكاء الاصطناعي (مثلاً بلا إنترنت) الصورة كتتسجّل وتتحسب البصمة من بعد.
 async function uploadImage(pid, kind, blob, onBusy) {
   let emb = null;
-  try { emb = await embed(blob, (r) => onBusy && onBusy('كنحمّل النموذج… ' + Math.round(r * 100) + '%')); }
-  catch (e) { toast('الصورة تسجّلات بلا بصمة (ما تحمّلش النموذج). عاود من «المعطيات ← الإعدادات».', true); }
-  onBusy && onBusy('جاري الحفظ…');
+  try { emb = await embed(blob, (r) => onBusy && onBusy('جارٍ تحميل النموذج… ' + Math.round(r * 100) + '%')); }
+  catch (e) { toast('حُفظت الصورة بدون بصمة (لم يُحمَّل النموذج). أعد المحاولة من «البيانات المرجعية ← الإعدادات».', true); }
+  onBusy && onBusy('جارٍ الحفظ…');
   const fd = new FormData(); fd.append('product_id', pid); fd.append('kind', kind); fd.append('image', blob, 'photo.jpg');
   if (emb) { fd.append('embedding', emb); fd.append('model', MODEL_TAG); }
   return api('image_add', fd, true);
@@ -562,10 +562,10 @@ async function uploadImage(pid, kind, blob, onBusy) {
 // ==========================================================================
 // 4) المعطيات: الثوب، الأكواد، المقاسات، الفروع، الأصناف، الإعدادات
 // ==========================================================================
-const DATA_TABS = [['fabrics', 'الثوب'], ['codes', 'الأكواد'], ['sizes', 'المقاسات'], ['branches', 'الفروع'], ['categories', 'الأصناف'], ['settings', 'الإعدادات']];
+const DATA_TABS = [['fabrics', 'الثوب'], ['codes', 'الرموز'], ['sizes', 'المقاسات'], ['branches', 'الفروع'], ['categories', 'الأصناف'], ['settings', 'الإعدادات']];
 function viewData(tab) {
   if (!DATA_TABS.some((t) => t[0] === tab)) tab = 'fabrics';
-  const head = `<div class="h2">المعطيات</div><div class="tabs">${DATA_TABS.map((t) => `<a class="tab${t[0] === tab ? ' on' : ''}" href="#/data/${t[0]}">${t[1]}</a>`).join('')}</div>`;
+  const head = `<div class="h2">البيانات المرجعية</div><div class="tabs">${DATA_TABS.map((t) => `<a class="tab${t[0] === tab ? ' on' : ''}" href="#/data/${t[0]}">${t[1]}</a>`).join('')}</div>`;
   if (tab === 'codes') return viewCodes(head);
   if (tab === 'settings') return viewSettings(head);
   const rows = S[tab] || [];
@@ -574,12 +574,12 @@ function viewData(tab) {
     : tab === 'sizes' ? S.products.filter((p) => list(p.sizes).includes(r.name)).length : null;
   const label = { fabrics: 'الثوب', sizes: 'المقاس', branches: 'الفرع', categories: 'الصنف' }[tab];
   app.innerHTML = head + `
-    <div class="addrow"><input class="input" id="nw" placeholder="${label} جديد…" style="max-width:340px"><button class="btn btn-main" id="add">${ICON.plus} زيد</button></div>
-    <div class="dtable"><table><thead><tr><th>${label}</th>${tab !== 'branches' ? '<th style="width:120px">المنتوجات</th>' : ''}<th style="width:44px"></th></tr></thead><tbody>
+    <div class="addrow"><input class="input" id="nw" placeholder="${label} جديد…" style="max-width:340px"><button class="btn btn-main" id="add">${ICON.plus} إضافة</button></div>
+    <div class="dtable"><table><thead><tr><th>${label}</th>${tab !== 'branches' ? '<th style="width:120px">المنتجات</th>' : ''}<th style="width:44px"></th></tr></thead><tbody>
     ${rows.map((r) => `<tr><td><input class="input" data-id="${r.id}" value="${esc(r.name)}"></td>${tab !== 'branches' ? `<td class="muted">${used(r) ?? ''}</td>` : ''}<td><button class="x" data-del="${r.id}" aria-label="حذف">×</button></td></tr>`).join('')}
-    </tbody></table>${rows.length ? '' : '<div class="empty">ما كاين والو مازال.</div>'}</div>`;
+    </tbody></table>${rows.length ? '' : '<div class="empty">لا توجد بيانات بعد.</div>'}</div>`;
   const add = async () => {
-    const name = $('#nw').value.trim(); if (!name) { toast('اكتب السمية أولاً', true); return; }
+    const name = $('#nw').value.trim(); if (!name) { toast('اكتب الاسم أولًا', true); return; }
     try { await api('list_add', { type: tab, name }); await loadAll(); viewData(tab); toast('تمت الإضافة ✓'); $('#nw').focus(); } catch (e) { toast(e.message, true); }
   };
   $('#add').onclick = add; $('#nw').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } };
@@ -588,15 +588,15 @@ function viewData(tab) {
   });
   $$('.dtable [data-del]').forEach((b) => b.onclick = async () => {
     const r = rows.find((x) => +x.id === +b.dataset.del);
-    const warn = tab === 'branches' ? ' (المخزون ديال هاد الفرع غادي يتمسح)' : '';
-    if (!(await confirmBox('نحذف «' + r.name + '»' + warn + '؟', 'حذف'))) return;
+    const warn = tab === 'branches' ? ' (سيُحذف مخزون هذا الفرع)' : '';
+    if (!(await confirmBox('هل تريد حذف «' + r.name + '»' + warn + '؟', 'حذف'))) return;
     try { await api('list_delete', { type: tab, id: r.id }); await loadAll(); viewData(tab); toast('تم الحذف'); } catch (e) { toast(e.message, true); }
   });
 }
 
 function viewCodes(head) {
-  app.innerHTML = head + `<div class="addrow"><input class="input" id="cq" placeholder="قلّب فالأكواد…" style="max-width:340px" autocomplete="off"></div>
-    <div class="dtable"><table><thead><tr><th>الكود</th><th>الاسم</th><th>الصنف</th><th>الثوب</th><th>الثمن</th></tr></thead><tbody id="ct"></tbody></table></div>`;
+  app.innerHTML = head + `<div class="addrow"><input class="input" id="cq" placeholder="ابحث في الرموز…" style="max-width:340px" autocomplete="off"></div>
+    <div class="dtable"><table><thead><tr><th>الرمز</th><th>الاسم</th><th>الصنف</th><th>الثوب</th><th>الثمن</th></tr></thead><tbody id="ct"></tbody></table></div>`;
   const draw = () => {
     const q = norm($('#cq').value);
     $('#ct').innerHTML = S.products.filter((p) => !q || norm(p.code + ' ' + p.name).includes(q))
@@ -610,15 +610,15 @@ async function viewSettings(head) {
   const thr = S.settings.match_threshold || 0.86;
   const missing = S.products.reduce((t, p) => t + (+p.images - +p.indexed), 0);
   app.innerHTML = head + `
-    <div class="card section"><div class="h2">الفرع ديال هاد الحاسوب</div>
+    <div class="card section"><div class="h2">فرع هذا الحاسوب</div>
       <select class="input" id="sBr" style="max-width:340px">${S.branches.map((b) => `<option value="${b.id}">${esc(b.name)}</option>`).join('')}</select>
-      <p class="muted" style="margin:8px 0 0">المخزون اللي كيتبدّل فهاد الجهاز كيتسجّل لهاد الفرع.</p></div>
+      <p class="muted" style="margin:8px 0 0">المخزون الذي يُعدَّل على هذا الجهاز يُسجَّل لهذا الفرع.</p></div>
     <div class="card section"><div class="h2">دقة البحث بالصورة</div>
       <input type="range" id="sThr" min="0.70" max="0.97" step="0.01" value="${thr}" style="width:100%;max-width:420px">
-      <div><b id="sThrV">${Math.round(thr * 100)}%</b> <span class="muted">— كلما طلعات، النظام كيولّي أصعب وكيقول «ما كاينش» بسهولة. إلا كان كيطلّع قطع غالطين طلّعها، وإلا ما كيلقاش قطع كاينين نقّصها.</span></div>
+      <div><b id="sThrV">${Math.round(thr * 100)}%</b> <span class="muted">— كلما ارتفعت، أصبح النظام أكثر صرامة وقال «غير موجود» بسهولة أكبر. إذا ظهرت قطع خاطئة فارفعها، وإذا لم يعثر على قطع موجودة فاخفضها.</span></div>
       <button class="btn" id="sThrSave" style="margin-top:10px">حفظ</button></div>
     <div class="card section"><div class="h2">بصمات الصور</div>
-      <p class="muted" style="margin:0 0 10px">${missing ? missing + ' صورة بلا بصمة (ما كتبانش فالبحث بالصورة).' : 'كل الصور عندها بصمة ✓'}</p>
+      <p class="muted" style="margin:0 0 10px">${missing ? missing + ' صورة بدون بصمة (لا تظهر في البحث بالصورة).' : 'جميع الصور لها بصمة ✓'}</p>
       <button class="btn" id="reindex"${missing ? '' : ' disabled'}>حساب البصمات الناقصة</button><div id="riSt"></div></div>`;
   $('#sBr').value = String(S.settings.current_branch || '');
   $('#sBr').onchange = async (e) => { try { await api('setting_set', { k: 'current_branch', v: +e.target.value }); await loadAll(); toast('تم ✓'); } catch (err) { toast(err.message, true); } };
@@ -633,9 +633,9 @@ async function viewSettings(head) {
         try {
           st.innerHTML = `<div class="status">صورة ${done + 1}/${missing}…</div>`;
           const blob = await (await fetch(img.path)).blob();
-          const emb = await embed(blob, (r) => { st.innerHTML = `<div class="status">كنحمّل النموذج… ${Math.round(r * 100)}%</div>`; });
+          const emb = await embed(blob, (r) => { st.innerHTML = `<div class="status">جارٍ تحميل النموذج… ${Math.round(r * 100)}%</div>`; });
           await api('image_embedding', { id: img.id, embedding: emb, model: MODEL_TAG }); done++;
-        } catch (e) { st.innerHTML = `<div class="status bad">${esc(e.message || 'وقع مشكل')}</div>`; ev.target.disabled = false; return; }
+        } catch (e) { st.innerHTML = `<div class="status bad">${esc(e.message || 'حدث خطأ')}</div>`; ev.target.disabled = false; return; }
       }
     }
     await loadAll(); viewData('settings'); toast('تم حساب ' + done + ' بصمة ✓');
@@ -664,5 +664,5 @@ $('#navSearch').addEventListener('click', (e) => { e.preventDefault(); location.
 
 (async function start() {
   try { await loadAll(); route(); }
-  catch (e) { app.innerHTML = `<div class="card empty"><b>${esc(e.message)}</b>شغّل Apache و MySQL فـXAMPP ومن بعد حدّث الصفحة.</div>`; }
+  catch (e) { app.innerHTML = `<div class="card empty"><b>${esc(e.message)}</b>شغّل Apache و MySQL في XAMPP ثم حدّث الصفحة.</div>`; }
 })();

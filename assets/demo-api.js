@@ -22,7 +22,7 @@
   var warned = false;
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(D)); }
-    catch (e) { if (!warned) { warned = true; console.warn('التخزين ممتلئ: الصور الجديدة كتبقى غير حتى تسدّ الصفحة.'); } }
+    catch (e) { if (!warned) { warned = true; console.warn('التخزين ممتلئ: ستبقى الصور الجديدة حتى إغلاق الصفحة فقط.'); } }
   }
   load();
   window.__demoReset = function () { try { localStorage.removeItem(KEY); } catch (e) {} D = fresh(); save(); };
@@ -69,7 +69,7 @@
         sizes: D.sizes, branches: D.branches, settings: { current_branch: br, match_threshold: +D.settings.match_threshold, label_type: D.settings.label_type === 'qr' ? 'qr' : 'barcode', label_opts: D.settings.label_opts || {} }, products: products }];
     },
     product: function (q) {
-      var p = byId(D.products, q.get('id')); if (!p) return err('المنتوج ما كاينش.', 404, 'not_found');
+      var p = byId(D.products, q.get('id')); if (!p) return err('المنتج غير موجود.', 404, 'not_found');
       return [200, Object.assign({}, p, {
         images: imgsOf(p.id).map(function (i) { return { id: i.id, kind: i.kind, path: i.path, indexed: i.embedding ? 1 : 0 }; }),
         stock: D.stock.filter(function (s) { return +s.product_id === +p.id; }).map(function (s) { return { branch_id: +s.branch_id, size: s.size, color: s.color, qty: s.qty }; }) })];
@@ -77,11 +77,11 @@
     product_save: function (q, b) {
       var id = +b.id || 0, code = clean(b.code, 60), name = clean(b.name, 200);
       var price = String(b.price == null ? '' : b.price).replace(/,/g, '.').replace(/\s|dh/gi, '');
-      if (!code) return err('الكود ضروري.');
-      if (!name) return err('الاسم ضروري.');
-      if (price !== '' && isNaN(+price)) return err('الثمن خاصو يكون رقم.');
+      if (!code) return err('الرمز مطلوب.');
+      if (!name) return err('الاسم مطلوب.');
+      if (price !== '' && isNaN(+price)) return err('يجب أن يكون الثمن رقمًا.');
       var dup = D.products.find(function (p) { return p.code === code && +p.id !== id; });
-      if (dup) return err('الكود «' + code + '» كاين ديجا عند «' + dup.name + '».', 409, 'duplicate_code');
+      if (dup) return err('الرمز «' + code + '» مستعمل مسبقًا للمنتج «' + dup.name + '».', 409, 'duplicate_code');
       var rec = { category_id: +b.category_id || null, code: code, name: name, fabric: clean(b.fabric, 150), price: price === '' ? null : Math.round(+price * 100) / 100,
         colors: csv(b.colors), sizes: csv(b.sizes), note: clean(b.note, 1000) };
       if (id) Object.assign(byId(D.products, id), rec);
@@ -98,9 +98,9 @@
     },
     image_add: async function (q, b, form) {
       var pid = +form.get('product_id'), kind = form.get('kind');
-      if (!byId(D.products, pid)) return err('المنتوج ما كاينش.', 404, 'not_found');
-      var file = form.get('image'); if (!file || !file.size) return err('ما وصلات حتى صورة.');
-      if (!/^image\/(jpeg|png|webp)$/.test(file.type || 'image/jpeg')) return err('الملف خاصو يكون صورة (JPG / PNG / WEBP).');
+      if (!byId(D.products, pid)) return err('المنتج غير موجود.', 404, 'not_found');
+      var file = form.get('image'); if (!file || !file.size) return err('لم تصل أي صورة.');
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type || 'image/jpeg')) return err('يجب أن يكون الملف صورة (JPG / PNG / WEBP).');
       var emb = form.get('embedding'); emb = vec(emb) ? emb : null;
       var rec = { id: D.seq.images++, product_id: pid, kind: KINDS.indexOf(kind) >= 0 ? kind : 'other', path: await blobToDataUrl(file),
         embedding: emb, model: emb ? clean(form.get('model'), 80) : null };
@@ -127,9 +127,9 @@
       return [200, { matches: m.slice(0, Math.max(1, Math.min(20, +b.limit || 8))), threshold: +D.settings.match_threshold }];
     },
     stock_save: function (q, b) {
-      var pid = +b.product_id, bid = +b.branch_id; if (!pid || !bid) return err('اختار الفرع أولاً.');
+      var pid = +b.product_id, bid = +b.branch_id; if (!pid || !bid) return err('اختر الفرع أولًا.');
       var rows = b.rows || [];
-      if (rows.some(function (r) { return (+r.qty || 0) < 0; })) return err('الكمية ما تقدرش تكون ناقص.');
+      if (rows.some(function (r) { return (+r.qty || 0) < 0; })) return err('لا يمكن أن تكون الكمية سالبة.');
       D.stock = D.stock.filter(function (s) { return !(+s.product_id === pid && +s.branch_id === bid); });
       rows.forEach(function (r) { var n = parseInt(r.qty, 10) || 0; if (n) D.stock.push({ product_id: pid, branch_id: bid, size: clean(r.size, 50), color: clean(r.color, 60), qty: n }); });
       save(); return [200, { ok: true }];
@@ -147,19 +147,19 @@
   function list(op, b) {
     var t = { fabrics: 1, sizes: 1, branches: 1, categories: 1 }[b.type] ? b.type : null; if (!t) return err('نوع غير معروف.');
     var L = D[t], name = clean(b.name, 150);
-    if (op !== 'delete' && !name) return err('اكتب السمية.');
+    if (op !== 'delete' && !name) return err('اكتب الاسم.');
     if (op === 'add') {
-      if (L.some(function (x) { return x.name === name; })) return err('«' + name + '» كاين ديجا.', 409, 'duplicate');
+      if (L.some(function (x) { return x.name === name; })) return err('«' + name + '» موجود مسبقًا.', 409, 'duplicate');
       var r = { id: D.seq[t]++, name: name }; if (t === 'sizes' || t === 'categories') r.sort = 100; L.push(r); save(); return [200, { ok: true, id: r.id }];
     }
     var row = byId(L, b.id);
     if (op === 'rename') {
-      if (L.some(function (x) { return x.name === name && +x.id !== +b.id; })) return err('«' + name + '» كاين ديجا.', 409, 'duplicate');
+      if (L.some(function (x) { return x.name === name && +x.id !== +b.id; })) return err('«' + name + '» موجود مسبقًا.', 409, 'duplicate');
       if (row) { if (t === 'fabrics') D.products.forEach(function (p) { if (p.fabric === row.name) p.fabric = name; }); row.name = name; }
       save(); return [200, { ok: true }];
     }
     if (t === 'categories' && D.products.some(function (p) { return +p.category_id === +b.id; }))
-      return err('ما يمكنش تحذف صنف فيه منتوجات. بدّل الصنف ديال المنتوجات أولاً.', 409, 'in_use');
+      return err('لا يمكن حذف صنف يحتوي على منتجات. غيّر صنف هذه المنتجات أولًا.', 409, 'in_use');
     D[t] = L.filter(function (x) { return +x.id !== +b.id; });
     if (t === 'branches') D.stock = D.stock.filter(function (s) { return +s.branch_id !== +b.id; });
     save(); return [200, { ok: true }];
@@ -174,8 +174,8 @@
     var form = init && init.body instanceof FormData ? init.body : null, body = {};
     if (init && typeof init.body === 'string') { try { body = JSON.parse(init.body); } catch (e) {} }
     var fn = A[action], res;
-    if (!fn) res = err('العملية ما معروفاش.', 400, 'unknown_action');
-    else { try { res = await fn(q, body, form); } catch (e) { console.error(e); res = err('وقع مشكل.', 500, 'server_error'); } }
+    if (!fn) res = err('عملية غير معروفة.', 400, 'unknown_action');
+    else { try { res = await fn(q, body, form); } catch (e) { console.error(e); res = err('حدث خطأ.', 500, 'server_error'); } }
     await new Promise(function (r) { setTimeout(r, 60); });   // بحال السيرفر
     return new Response(JSON.stringify(res[1]), { status: res[0], headers: { 'Content-Type': 'application/json' } });
   };

@@ -11,9 +11,9 @@
 <body>
 
 <div class="demo" dir="rtl"><div class="demo-in">
-  <p><b>نسخة تجريبية:</b> نفس الواجهة ديال النظام، ولكن البيانات كتبقى غير فهاد المتصفح. النظام الحقيقي كيخدم بـPHP + MySQL (XAMPP)، والبحث بالصورة فيه بنموذج CLIP — هنا مبسّط.</p>
+  <p><b>نسخة تجريبية:</b> الواجهة نفسها الخاصة بالنظام، لكن البيانات تُحفظ في هذا المتصفح فقط. يعمل النظام الحقيقي بـ PHP + MySQL (XAMPP)، ويعتمد البحث بالصورة فيه على نموذج CLIP — وهو مبسّط هنا.</p>
   <button class="btn btn-main" id="showGuide" type="button">الدليل والمقارنة</button>
-  <button class="btn" id="showSrc" type="button">كود السيرفر (PHP)</button>
+  <button class="btn" id="showSrc" type="button">شيفرة الخادم (PHP)</button>
   <button class="btn" id="resetDemo" type="button">إعادة البيانات</button>
 </div></div>
 
@@ -23,12 +23,12 @@
     <label class="branch"><span>الفرع:</span><select class="input" id="branch" autocomplete="off" style="min-height:38px;padding:4px 8px"></select></label>
   </div></header>
 
-  <main id="app"><div class="empty">جاري التحميل…</div></main>
+  <main id="app"><div class="empty">جارٍ التحميل…</div></main>
 
   <nav class="nav"><div class="nav-in">
     <a href="#/" id="navSearch" data-tab="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>البحث</a>
-    <a href="#/add" data-tab="add"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>إضافة منتوج</a>
-    <a href="#/data/fabrics" data-tab="data"><svg class="ico" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>المعطيات</a>
+    <a href="#/add" data-tab="add"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>إضافة منتج</a>
+    <a href="#/data/fabrics" data-tab="data"><svg class="ico" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>البيانات المرجعية</a>
   </div></nav>
 </div>
 
@@ -41,7 +41,7 @@
   function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
   document.getElementById('showSrc').onclick = function () {
     var el = document.createElement('div'); el.className = 'modal';
-    el.innerHTML = '<div class="sheet wide" role="dialog" aria-modal="true" dir="rtl"><div class="sheet-head"><h3>كود السيرفر — النظام الحقيقي</h3><button class="close" type="button" aria-label="إغلاق">×</button></div>' +
+    el.innerHTML = '<div class="sheet wide" role="dialog" aria-modal="true" dir="rtl"><div class="sheet-head"><h3>شيفرة الخادم — النظام الحقيقي</h3><button class="close" type="button" aria-label="إغلاق">×</button></div>' +
       '<div class="src-tabs">' + FILES.map(function (f, i) { return '<button type="button" data-i="' + i + '" title="' + esc(f[1]) + '">' + esc(f[0]) + '</button>'; }).join('') + '</div>' +
       '<p class="muted" id="srcHint" style="margin:0 0 8px"></p><pre class="src" id="srcBox">…</pre></div>';
     document.body.appendChild(el);
@@ -53,7 +53,7 @@
       el.querySelector('#srcHint').textContent = FILES[i][1];
       fetch('source/' + FILES[i][0] + '.txt').then(function (r) { return r.text(); })
         .then(function (t) { el.querySelector('#srcBox').textContent = t; })
-        .catch(function () { el.querySelector('#srcBox').textContent = 'ما قدرتش نقرا الملف.'; });
+        .catch(function () { el.querySelector('#srcBox').textContent = 'تعذّرت قراءة الملف.'; });
     };
     el.querySelectorAll('.src-tabs button').forEach(function (b) { b.onclick = function () { show(+b.dataset.i); }; });
     show(0);
