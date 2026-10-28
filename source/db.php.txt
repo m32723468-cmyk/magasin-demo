@@ -1,0 +1,82 @@
+<?php
+// الاتصال بقاعدة البيانات + إنشاء الجداول أوتوماتيكياً أول مرة (ما كتحتاجش تدير شي حاجة فـphpMyAdmin).
+require_once __DIR__ . '/../config.php';
+
+function db(): PDO {
+  static $pdo = null;
+  if ($pdo) return $pdo;
+  $opts = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC];
+  try {
+    $pdo = new PDO('mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4', DB_USER, DB_PASS, $opts);
+  } catch (PDOException $e) {
+    // القاعدة ما كايناش بعد: كنصاوبوها
+    $root = new PDO('mysql:host=' . DB_HOST . ';charset=utf8mb4', DB_USER, DB_PASS, $opts);
+    $root->exec('CREATE DATABASE IF NOT EXISTS `' . DB_NAME . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+    $pdo = new PDO('mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4', DB_USER, DB_PASS, $opts);
+  }
+  ensure_schema($pdo);
+  return $pdo;
+}
+
+function ensure_schema(PDO $pdo): void {
+  $T = 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci';
+  $pdo->exec("CREATE TABLE IF NOT EXISTS categories (
+    id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL UNIQUE, sort INT NOT NULL DEFAULT 0) $T");
+  $pdo->exec("CREATE TABLE IF NOT EXISTS fabrics (
+    id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(150) NOT NULL UNIQUE) $T");
+  $pdo->exec("CREATE TABLE IF NOT EXISTS sizes (
+    id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL UNIQUE, sort INT NOT NULL DEFAULT 0) $T");
+  $pdo->exec("CREATE TABLE IF NOT EXISTS branches (
+    id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(150) NOT NULL UNIQUE) $T");
+  $pdo->exec("CREATE TABLE IF NOT EXISTS products (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    category_id INT NULL,
+    code VARCHAR(60) NOT NULL UNIQUE,
+    name VARCHAR(200) NOT NULL DEFAULT '',
+    fabric VARCHAR(150) NOT NULL DEFAULT '',
+    price DECIMAL(10,2) NULL,
+    colors VARCHAR(300) NOT NULL DEFAULT '',
+    sizes VARCHAR(300) NOT NULL DEFAULT '',
+    note TEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_cat (category_id), KEY idx_name (name)) $T");
+  // الصور: كل منتوج عندو بزاف ديال الصور (كامل / العنق / فاليد...) وكل صورة عندها «بصمة» للبحث بالصورة
+  $pdo->exec("CREATE TABLE IF NOT EXISTS product_images (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_id INT NOT NULL,
+    kind VARCHAR(20) NOT NULL DEFAULT 'full',
+    path VARCHAR(255) NOT NULL,
+    embedding MEDIUMTEXT NULL,
+    model VARCHAR(80) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_prod (product_id),
+    CONSTRAINT fk_img_prod FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE) $T");
+  // المخزون: الكمية لكل (منتوج، فرع، مقاس، لون)
+  $pdo->exec("CREATE TABLE IF NOT EXISTS stock (
+    product_id INT NOT NULL, branch_id INT NOT NULL,
+    size VARCHAR(50) NOT NULL DEFAULT '', color VARCHAR(60) NOT NULL DEFAULT '',
+    qty INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (product_id, branch_id, size, color),
+    CONSTRAINT fk_st_prod FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    CONSTRAINT fk_st_br FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE) $T");
+  $pdo->exec("CREATE TABLE IF NOT EXISTS settings (k VARCHAR(60) PRIMARY KEY, v TEXT NULL) $T");
+
+  // أول مرة: الأصناف والمقاسات الأساسية
+  if (!(int)$pdo->query('SELECT COUNT(*) FROM categories')->fetchColumn()) {
+    $st = $pdo->prepare('INSERT INTO categories (name, sort) VALUES (?, ?)');
+    foreach (['العبايات', 'الخمارات', 'النقابات', 'السبنية'] as $i => $n) $st->execute([$n, $i]);
+  }
+  if (!(int)$pdo->query('SELECT COUNT(*) FROM sizes')->fetchColumn()) {
+    $st = $pdo->prepare('INSERT INTO sizes (name, sort) VALUES (?, ?)');
+    foreach (['S', 'M', 'L', 'XL', 'XXL', '1', '2', '3'] as $i => $n) $st->execute([$n, $i]);
+  }
+  $pdo->exec("INSERT IGNORE INTO settings (k, v) VALUES ('match_threshold', '0.86'), ('label_type', 'barcode')");
+}
+
+function setting(string $k, $default = null) {
+  $st = db()->prepare('SELECT v FROM settings WHERE k = ?');
+  $st->execute([$k]);
+  $v = $st->fetchColumn();
+  return $v === false ? $default : $v;
+}

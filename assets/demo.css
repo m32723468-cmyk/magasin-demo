@@ -1,0 +1,34 @@
+/* إضافات النسخة التجريبية فقط (فوق assets/app.css ديال النظام الحقيقي) */
+html, body { background: var(--bg); color: var(--ink); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--card); }
+.top { top: env(safe-area-inset-top, 0px); }
+.top-in, main, .demo-in { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+main { padding-block: 14px 110px; }
+.nav { padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+
+.demo { background: var(--brand-soft); border-bottom: 1px solid #e4d2e4; }
+.demo-in { max-width: 980px; margin: 0 auto; padding-block: 8px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 13.5px; color: var(--brand); }
+.demo-in p { margin: 0; flex: 1 1 320px; min-width: 0; }
+.demo-in .btn { min-height: 34px; padding: 4px 12px; font-size: 13px; }
+
+/* الطباعة والكاميرا ما كيخدموش فالصفحة الأونلاين */
+#printQr { display: none !important; }
+
+/* عرض كود السيرفر */
+.src-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.src-tabs button { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); cursor: pointer; font-family: Consolas, monospace; font-size: 13px; color: var(--ink); }
+.src-tabs button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.src { margin: 0; max-height: 62vh; overflow: auto; background: #1d1a20; color: #f1edf3; border-radius: 10px; padding: 14px; font: 12.5px/1.55 Consolas, 'Courier New', monospace; direction: ltr; text-align: left; white-space: pre; tab-size: 2; }
+.sheet.wide { width: min(100%, 900px); }
+
+/* الدليل */
+.guide h4 { margin: 18px 0 8px; font-size: 16px; color: var(--brand); }
+.guide ul { margin: 0; padding-inline-start: 20px; display: grid; gap: 4px; }
+.g-note { padding: 10px 12px; border-radius: 10px; background: var(--brand-soft); color: var(--ink); margin-bottom: 8px; line-height: 1.6; }
+.g-soft { background: #f3f1f4; }
+.g-table { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+.g-table table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px; }
+.g-table th, .g-table td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: start; vertical-align: top; }
+.g-table thead th { background: #f7f5f8; color: var(--muted); }
+.g-table tbody th { white-space: nowrap; font-weight: 700; }
+.g-table td:last-child { background: #fbf8fc; }

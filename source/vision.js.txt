@@ -1,0 +1,66 @@
+// ==========================================================================
+// البحث بالصورة: كنحوّلو الصورة لـ«بصمة» (512 رقم) بنموذج CLIP عبر transformers.js
+//  - الصورة كتولّي أبيض وأسود قبل الحساب ⇒ المطابقة بالشكل والتفاصيل، ماشي باللون
+//  - الصورة كتتحط كاملة وسط مربع أبيض (بلا قصّ) ⇒ العباية الطويلة ما كيتقطعش منها والو
+//  - النموذج كيتحمّل مرة وحدة (~89 MB) وكيبقى محفوظ فالمتصفح ديال الجهاز
+// ==========================================================================
+const LIB = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1';
+const MODEL = 'Xenova/clip-vit-base-patch32';
+export const MODEL_TAG = 'clip-b32-gray-v1';   // كيتسجّل مع كل بصمة؛ إلا تبدّلات الطريقة كنعرفو البصمات القديمة
+
+let ready = null;
+
+function load(onProgress) {
+  if (ready) return ready;
+  ready = (async () => {
+    const T = await import(LIB);
+    T.env.allowLocalModels = false;
+    const files = {};
+    const progress_callback = (p) => {
+      if (!onProgress || !p || p.status !== 'progress' || !p.total) return;
+      files[p.file] = [p.loaded, p.total];
+      let a = 0, b = 0; for (const k in files) { a += files[k][0]; b += files[k][1]; }
+      onProgress(b ? a / b : 0);
+    };
+    const processor = await T.AutoProcessor.from_pretrained(MODEL);
+    const model = await T.CLIPVisionModelWithProjection.from_pretrained(MODEL, { dtype: 'q8', progress_callback });
+    return { T, processor, model };
+  })();
+  ready.catch(() => { ready = null; });   // إلا فشل التحميل (مثلاً بلا إنترنت) نعاودو المرة الجاية
+  return ready;
+}
+
+// الصورة → مربع 336×336، أبيض وأسود، والقطعة كاملة فالوسط
+async function prepare(blob) {
+  const bmp = await createImageBitmap(blob);
+  const S = 336, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, S, S);
+  const k = Math.min(S / bmp.width, S / bmp.height), w = bmp.width * k, h = bmp.height * k;
+  g.filter = 'grayscale(1) contrast(1.1)';
+  g.drawImage(bmp, (S - w) / 2, (S - h) / 2, w, h);
+  bmp.close && bmp.close();
+  return await new Promise((ok) => c.toBlob(ok, 'image/png'));
+}
+
+function toBase64(f32) {
+  // كنطبّعو البصمة (طولها = 1) باش المقارنة تولّي ضرب بسيط
+  let n = 0; for (let i = 0; i < f32.length; i++) n += f32[i] * f32[i];
+  n = Math.sqrt(n) || 1;
+  const out = new Float32Array(f32.length);
+  for (let i = 0; i < f32.length; i++) out[i] = f32[i] / n;
+  const bytes = new Uint8Array(out.buffer); let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+/** صورة (Blob) → بصمة base64. onProgress(0..1) كيتنادى غير فالتحميل الأول ديال النموذج. */
+export async function embed(blob, onProgress) {
+  const { T, processor, model } = await load(onProgress);
+  const img = await T.RawImage.fromBlob(await prepare(blob));
+  const inputs = await processor(img);
+  const { image_embeds } = await model(inputs);
+  return toBase64(image_embeds.data);
+}
+
+export function isLoaded() { return !!ready; }

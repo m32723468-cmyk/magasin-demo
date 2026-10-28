@@ -1,0 +1,9 @@
+<?php
+// إعدادات نظام المحل — XAMPP (بدّل غير إلا درتي كلمة سر لـMySQL فـphpMyAdmin)
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'store_system');
+define('DB_USER', 'root');
+define('DB_PASS', '');
+
+define('UPLOAD_DIR', __DIR__ . DIRECTORY_SEPARATOR . 'uploads');
+define('MAX_IMAGE_BYTES', 6 * 1024 * 1024);   // أقصى حجم لصورة وحدة

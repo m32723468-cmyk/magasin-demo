@@ -1,0 +1,267 @@
+<?php
+// API ديال نظام المحل — كل الطلبات: api.php?action=...
+// القراءة بـGET والكتابة بـPOST (JSON، ولا multipart لرفع الصور).
+require __DIR__ . '/lib/db.php';
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store');
+
+function out($data, int $code = 200): void { http_response_code($code); echo json_encode($data, JSON_UNESCAPED_UNICODE); exit; }
+function fail(string $msg, int $code = 400, string $err = 'bad_request'): void { out(['error' => $err, 'message' => $msg], $code); }
+function body(): array { $j = json_decode(file_get_contents('php://input'), true); return is_array($j) ? $j : []; }
+function clean($s, int $max = 200): string { return mb_substr(trim(preg_replace('/\s+/u', ' ', (string)$s)), 0, $max); }
+function csv_list($v): string {   // ["L","XL"] ولا "L, XL" → "L,XL" (بلا تكرار)
+  $a = is_array($v) ? $v : explode(',', (string)$v);
+  $a = array_values(array_unique(array_filter(array_map(fn($x) => clean($x, 60), $a), 'strlen')));
+  return implode(',', $a);
+}
+
+// البصمة ديال الصورة (vector): Float32 مكتوب بـbase64 → مصفوفة أرقام، مطبّعة (طولها = 1)
+function vec_decode(?string $b64): ?array {
+  if (!$b64) return null;
+  $bin = base64_decode($b64, true);
+  if ($bin === false || strlen($bin) < 64 || strlen($bin) % 4) return null;
+  $v = array_values(unpack('g*', $bin));
+  $n = sqrt(array_sum(array_map(fn($x) => $x * $x, $v)));
+  if ($n <= 0) return null;
+  return array_map(fn($x) => $x / $n, $v);
+}
+
+$LISTS = ['fabrics' => 'fabrics', 'sizes' => 'sizes', 'branches' => 'branches', 'categories' => 'categories'];
+
+try {
+  $pdo = db();
+  $action = $_GET['action'] ?? '';
+  $method = $_SERVER['REQUEST_METHOD'];
+
+  // ---------- قراءة ----------
+  if ($action === 'init') {
+    $cats = $pdo->query('SELECT id, name, sort FROM categories ORDER BY sort, id')->fetchAll();
+    $branch = (int)setting('current_branch', 0);
+    $products = $pdo->query("SELECT p.id, p.category_id, p.code, p.name, p.fabric, p.price, p.colors, p.sizes, p.note,
+        (SELECT path FROM product_images i WHERE i.product_id = p.id ORDER BY FIELD(i.kind,'full','neck','hand','other'), i.id LIMIT 1) AS thumb,
+        (SELECT COUNT(*) FROM product_images i WHERE i.product_id = p.id) AS images,
+        (SELECT COUNT(*) FROM product_images i WHERE i.product_id = p.id AND i.embedding IS NOT NULL) AS indexed
+      FROM products p ORDER BY p.code")->fetchAll();
+    // المخزون: مجموع الفرع الحالي + كل الفروع، والمقاسات/الألوان المتوفرة فالفرع الحالي (للفلاتر)
+    $stock = [];
+    foreach ($pdo->query('SELECT product_id, branch_id, size, color, qty FROM stock WHERE qty <> 0') as $r) {
+      $s = &$stock[$r['product_id']];
+      $s['all'] = ($s['all'] ?? 0) + (int)$r['qty'];
+      if ((int)$r['branch_id'] === $branch) {
+        $s['here'] = ($s['here'] ?? 0) + (int)$r['qty'];
+        if ((int)$r['qty'] > 0) { $s['sizes'][$r['size']] = 1; $s['colors'][$r['color']] = 1; }
+      }
+      unset($s);
+    }
+    foreach ($products as &$p) {
+      $s = $stock[$p['id']] ?? [];
+      $p['stock_here'] = $s['here'] ?? 0; $p['stock_all'] = $s['all'] ?? 0;
+      $p['sizes_here'] = array_keys($s['sizes'] ?? []); $p['colors_here'] = array_keys($s['colors'] ?? []);
+      $p['price'] = $p['price'] === null ? null : (float)$p['price'];
+    }
+    unset($p);
+    out([
+      'categories' => $cats,
+      'fabrics' => $pdo->query('SELECT id, name FROM fabrics ORDER BY name')->fetchAll(),
+      'sizes' => $pdo->query('SELECT id, name, sort FROM sizes ORDER BY sort, id')->fetchAll(),
+      'branches' => $pdo->query('SELECT id, name FROM branches ORDER BY name')->fetchAll(),
+      'settings' => ['current_branch' => $branch, 'match_threshold' => (float)setting('match_threshold', 0.86),
+                     'label_type' => setting('label_type', 'barcode') === 'qr' ? 'qr' : 'barcode',
+                     'label_opts' => json_decode((string)setting('label_opts', '{}'), true) ?: new stdClass()],
+      'products' => $products,
+    ]);
+  }
+
+  if ($action === 'product') {
+    $id = (int)($_GET['id'] ?? 0);
+    $st = $pdo->prepare('SELECT * FROM products WHERE id = ?'); $st->execute([$id]);
+    $p = $st->fetch(); if (!$p) fail('المنتوج ما كاينش.', 404, 'not_found');
+    $p['price'] = $p['price'] === null ? null : (float)$p['price'];
+    $st = $pdo->prepare("SELECT id, kind, path, embedding IS NOT NULL AS indexed FROM product_images WHERE product_id = ? ORDER BY FIELD(kind,'full','neck','hand','other'), id");
+    $st->execute([$id]); $p['images'] = $st->fetchAll();
+    $st = $pdo->prepare('SELECT branch_id, size, color, qty FROM stock WHERE product_id = ?'); $st->execute([$id]);
+    $p['stock'] = array_map(fn($r) => ['branch_id' => (int)$r['branch_id'], 'size' => $r['size'], 'color' => $r['color'], 'qty' => (int)$r['qty']], $st->fetchAll());
+    out($p);
+  }
+
+  if ($method !== 'POST') fail('العملية ما معروفاش.', 400, 'unknown_action');
+
+  // ---------- المنتوجات ----------
+  if ($action === 'product_save') {
+    $b = body();
+    $id = (int)($b['id'] ?? 0);
+    $code = clean($b['code'] ?? '', 60);
+    $name = clean($b['name'] ?? '', 200);
+    $cat = (int)($b['category_id'] ?? 0) ?: null;
+    $fabric = clean($b['fabric'] ?? '', 150);
+    $priceRaw = str_replace([',', ' ', 'DH', 'dh'], ['.', '', '', ''], (string)($b['price'] ?? ''));
+    if ($code === '') fail('الكود ضروري.');
+    if ($name === '') fail('الاسم ضروري.');
+    if ($priceRaw !== '' && !is_numeric($priceRaw)) fail('الثمن خاصو يكون رقم.');
+    $price = $priceRaw === '' ? null : round((float)$priceRaw, 2);
+    $dup = $pdo->prepare('SELECT id, name FROM products WHERE code = ? AND id <> ?'); $dup->execute([$code, $id]);
+    if ($d = $dup->fetch()) fail('الكود «' . $code . '» كاين ديجا عند «' . $d['name'] . '».', 409, 'duplicate_code');
+    $sizes = csv_list($b['sizes'] ?? ''); $colors = csv_list($b['colors'] ?? '');
+    $note = clean($b['note'] ?? '', 1000);
+    $pdo->beginTransaction();
+    if ($id) {
+      $pdo->prepare('UPDATE products SET category_id=?, code=?, name=?, fabric=?, price=?, colors=?, sizes=?, note=? WHERE id=?')
+          ->execute([$cat, $code, $name, $fabric, $price, $colors, $sizes, $note, $id]);
+    } else {
+      $pdo->prepare('INSERT INTO products (category_id, code, name, fabric, price, colors, sizes, note) VALUES (?,?,?,?,?,?,?,?)')
+          ->execute([$cat, $code, $name, $fabric, $price, $colors, $sizes, $note]);
+      $id = (int)$pdo->lastInsertId();
+    }
+    // كل ثوب ولا مقاس جديد كيتسجّل بوحدو فـ«المعطيات»
+    if ($fabric !== '') $pdo->prepare('INSERT IGNORE INTO fabrics (name) VALUES (?)')->execute([$fabric]);
+    foreach (array_filter(explode(',', $sizes)) as $s)
+      $pdo->prepare('INSERT IGNORE INTO sizes (name, sort) VALUES (?, 100)')->execute([$s]);
+    $pdo->commit();
+    out(['ok' => true, 'id' => $id]);
+  }
+
+  if ($action === 'product_delete') {
+    $id = (int)(body()['id'] ?? 0);
+    $st = $pdo->prepare('SELECT path FROM product_images WHERE product_id = ?'); $st->execute([$id]);
+    $paths = $st->fetchAll(PDO::FETCH_COLUMN);
+    $pdo->prepare('DELETE FROM products WHERE id = ?')->execute([$id]);
+    foreach ($paths as $p) @unlink(__DIR__ . '/' . $p);
+    out(['ok' => true]);
+  }
+
+  // ---------- الصور + البصمة ----------
+  if ($action === 'image_add') {
+    $pid = (int)($_POST['product_id'] ?? 0);
+    $kind = in_array($_POST['kind'] ?? '', ['full', 'neck', 'hand', 'other'], true) ? $_POST['kind'] : 'other';
+    $chk = $pdo->prepare('SELECT id FROM products WHERE id = ?'); $chk->execute([$pid]);
+    if (!$chk->fetch()) fail('المنتوج ما كاينش.', 404, 'not_found');
+    $f = $_FILES['image'] ?? null;
+    if (!$f || $f['error'] !== UPLOAD_ERR_OK) fail('ما وصلات حتى صورة.');
+    if ($f['size'] > MAX_IMAGE_BYTES) fail('الصورة كبيرة بزاف.');
+    $info = @getimagesize($f['tmp_name']);
+    $ext = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'][$info['mime'] ?? ''] ?? null;
+    if (!$ext) fail('الملف خاصو يكون صورة (JPG / PNG / WEBP).');
+    if (!is_dir(UPLOAD_DIR)) mkdir(UPLOAD_DIR, 0775, true);
+    $name = sha1_file($f['tmp_name']) . '.' . $ext;
+    $dest = UPLOAD_DIR . DIRECTORY_SEPARATOR . $name;
+    if (!is_file($dest) && !move_uploaded_file($f['tmp_name'], $dest)) fail('ما قدرتش نحفظ الصورة.', 500, 'save_failed');
+    $emb = vec_decode($_POST['embedding'] ?? null) ? $_POST['embedding'] : null;
+    $pdo->prepare('INSERT INTO product_images (product_id, kind, path, embedding, model) VALUES (?,?,?,?,?)')
+        ->execute([$pid, $kind, 'uploads/' . $name, $emb, $emb ? clean($_POST['model'] ?? '', 80) : null]);
+    out(['ok' => true, 'id' => (int)$pdo->lastInsertId(), 'path' => 'uploads/' . $name, 'indexed' => (bool)$emb]);
+  }
+
+  if ($action === 'image_delete') {
+    $id = (int)(body()['id'] ?? 0);
+    $st = $pdo->prepare('SELECT path FROM product_images WHERE id = ?'); $st->execute([$id]);
+    $path = $st->fetchColumn();
+    $pdo->prepare('DELETE FROM product_images WHERE id = ?')->execute([$id]);
+    if ($path) {   // الملف كيتمسح غير إلا ما بقاش مستعمل فصورة أخرى
+      $u = $pdo->prepare('SELECT COUNT(*) FROM product_images WHERE path = ?'); $u->execute([$path]);
+      if (!(int)$u->fetchColumn()) @unlink(__DIR__ . '/' . $path);
+    }
+    out(['ok' => true]);
+  }
+
+  if ($action === 'image_embedding') {   // باش نعاودو نحسبو البصمة لصورة قديمة
+    $b = body();
+    if (!vec_decode($b['embedding'] ?? null)) fail('البصمة غير صالحة.');
+    $pdo->prepare('UPDATE product_images SET embedding = ?, model = ? WHERE id = ?')
+        ->execute([$b['embedding'], clean($b['model'] ?? '', 80), (int)($b['id'] ?? 0)]);
+    out(['ok' => true]);
+  }
+
+  // البحث بالصورة: كنقارنو البصمة ديال الصورة المصوّرة مع كل الصور المسجّلة، وكل منتوج كياخد أحسن نتيجة ديالو
+  if ($action === 'search_image') {
+    $b = body();
+    $q = vec_decode($b['embedding'] ?? null);
+    if (!$q) fail('البصمة غير صالحة.');
+    $cat = (int)($b['category_id'] ?? 0);
+    $model = clean($b['model'] ?? '', 80);
+    $sql = 'SELECT i.id, i.product_id, i.kind, i.embedding FROM product_images i JOIN products p ON p.id = i.product_id
+            WHERE i.embedding IS NOT NULL' . ($cat ? ' AND p.category_id = ' . $cat : '') . ($model ? ' AND i.model = ' . $pdo->quote($model) : '');
+    $best = [];
+    foreach ($pdo->query($sql) as $r) {
+      $v = vec_decode($r['embedding']); if (!$v || count($v) !== count($q)) continue;
+      $s = 0.0; foreach ($q as $k => $x) $s += $x * $v[$k];
+      $pid = (int)$r['product_id'];
+      if (!isset($best[$pid]) || $s > $best[$pid]['score']) $best[$pid] = ['product_id' => $pid, 'score' => round($s, 4), 'image_id' => (int)$r['id'], 'kind' => $r['kind']];
+    }
+    usort($best, fn($a, $b) => $b['score'] <=> $a['score']);
+    out(['matches' => array_slice(array_values($best), 0, max(1, min(20, (int)($b['limit'] ?? 8)))),
+         'threshold' => (float)setting('match_threshold', 0.86)]);
+  }
+
+  // ---------- المخزون ----------
+  if ($action === 'stock_save') {
+    $b = body();
+    $pid = (int)($b['product_id'] ?? 0); $bid = (int)($b['branch_id'] ?? 0);
+    if (!$pid || !$bid) fail('اختار الفرع أولاً.');
+    $pdo->beginTransaction();
+    $pdo->prepare('DELETE FROM stock WHERE product_id = ? AND branch_id = ?')->execute([$pid, $bid]);
+    $ins = $pdo->prepare('INSERT INTO stock (product_id, branch_id, size, color, qty) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE qty = VALUES(qty)');
+    foreach (($b['rows'] ?? []) as $r) {
+      $qty = (int)($r['qty'] ?? 0); if ($qty === 0) continue;
+      if ($qty < 0) { $pdo->rollBack(); fail('الكمية ما تقدرش تكون ناقص.'); }
+      $ins->execute([$pid, $bid, clean($r['size'] ?? '', 50), clean($r['color'] ?? '', 60), $qty]);
+    }
+    $pdo->commit();
+    out(['ok' => true]);
+  }
+
+  // ---------- المعطيات (الثوب، المقاسات، الفروع، الأصناف) ----------
+  if (in_array($action, ['list_add', 'list_rename', 'list_delete'], true)) {
+    $b = body();
+    $t = $LISTS[$b['type'] ?? ''] ?? fail('نوع غير معروف.');
+    $name = clean($b['name'] ?? '', 150);
+    if ($action !== 'list_delete' && $name === '') fail('اكتب السمية.');
+    if ($action === 'list_add') {
+      $ex = $pdo->prepare("SELECT id FROM `$t` WHERE name = ?"); $ex->execute([$name]);
+      if ($ex->fetch()) fail('«' . $name . '» كاين ديجا.', 409, 'duplicate');
+      $pdo->prepare("INSERT INTO `$t` (name) VALUES (?)")->execute([$name]);
+      out(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+    }
+    $id = (int)($b['id'] ?? 0);
+    if ($action === 'list_rename') {
+      $old = $pdo->prepare("SELECT name FROM `$t` WHERE id = ?"); $old->execute([$id]); $oldName = $old->fetchColumn();
+      $ex = $pdo->prepare("SELECT id FROM `$t` WHERE name = ? AND id <> ?"); $ex->execute([$name, $id]);
+      if ($ex->fetch()) fail('«' . $name . '» كاين ديجا.', 409, 'duplicate');
+      $pdo->beginTransaction();
+      $pdo->prepare("UPDATE `$t` SET name = ? WHERE id = ?")->execute([$name, $id]);
+      if ($t === 'fabrics' && $oldName !== false)   // السمية الجديدة كتتبدّل حتى فالمنتوجات
+        $pdo->prepare('UPDATE products SET fabric = ? WHERE fabric = ?')->execute([$name, $oldName]);
+      $pdo->commit();
+      out(['ok' => true]);
+    }
+    if ($t === 'categories') {
+      $c = $pdo->prepare('SELECT COUNT(*) FROM products WHERE category_id = ?'); $c->execute([$id]);
+      if ((int)$c->fetchColumn()) fail('ما يمكنش تحذف صنف فيه منتوجات. بدّل الصنف ديال المنتوجات أولاً.', 409, 'in_use');
+    }
+    $pdo->prepare("DELETE FROM `$t` WHERE id = ?")->execute([$id]);
+    out(['ok' => true]);
+  }
+
+  if ($action === 'setting_set') {
+    $b = body();
+    $k = $b['k'] ?? '';
+    if (!in_array($k, ['current_branch', 'match_threshold', 'label_type', 'label_opts'], true)) fail('إعداد غير معروف.');
+    if ($k === 'label_opts') {   // شنو يبان فالملصق (كلشي اختياري)
+      $o = is_array($b['v'] ?? null) ? $b['v'] : [];
+      $clean = [];
+      foreach (['code', 'name', 'meta', 'sizes', 'colors', 'price'] as $f) $clean[$f] = !empty($o[$f]);
+      $clean['extra'] = clean($o['extra'] ?? '', 80);
+      $pdo->prepare("INSERT INTO settings (k, v) VALUES ('label_opts', ?) ON DUPLICATE KEY UPDATE v = VALUES(v)")->execute([json_encode($clean, JSON_UNESCAPED_UNICODE)]);
+      out(['ok' => true]);
+    }
+    $v = $k === 'current_branch' ? (string)(int)$b['v']
+       : ($k === 'label_type' ? (($b['v'] ?? '') === 'qr' ? 'qr' : 'barcode') : (string)max(0.5, min(0.99, (float)$b['v'])));
+    $pdo->prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)')->execute([$k, $v]);
+    out(['ok' => true]);
+  }
+
+  fail('العملية ما معروفاش.', 400, 'unknown_action');
+} catch (Throwable $e) {
+  if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
+  error_log('[magasin] ' . $e->getMessage());
+  out(['error' => 'server_error', 'message' => 'وقع مشكل فالسيرفر. عاود جرّب.'], 500);
+}
