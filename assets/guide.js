@@ -33,7 +33,6 @@
     el.innerHTML = '<div class="sheet wide guide" role="dialog" aria-modal="true" aria-labelledby="gTitle" dir="rtl">' +
       '<div class="sheet-head"><h3 id="gTitle">الدليل</h3><button class="close" type="button" aria-label="إغلاق">×</button></div>' +
       '<div class="g-note"><b>هاد النظام غير مثال.</b> نموذج تجريبي باش نوضّحو الفكرة والطريقة اللي كنقترحو، ماشي نسخة نهائية.</div>' +
-      '<div class="g-note g-soft"><b>ما نقلناش من النظام الأول (v1).</b> تكتب من الصفر بكود جديد. المشترك غير الفكرة: العامل كيقلّب على السلعة بسرعة. المقارنة تحت مبنية غير على اللي باين فالملفات العامة ديال v1.</div>' +
       '<h4>المقارنة مع v1</h4><div class="g-table"><table><thead><tr><th></th><th>v1</th><th>هاد المثال</th></tr></thead><tbody>' +
       COMPARE.map(function (r) { return '<tr><th scope="row">' + esc(r[0]) + '</th><td>' + esc(r[1]) + '</td><td>' + esc(r[2]) + '</td></tr>'; }).join('') +
       '</tbody></table></div>' +
